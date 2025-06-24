@@ -1,41 +1,40 @@
-import tweepy
+import os
 import schedule
 import time
 from datetime import datetime
 from flask import Flask
-import os
 import threading
+from tweepy import Client
 
 app = Flask(__name__)
 
-# APIキー（環境変数から取得）
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET")
+# 認証（v2エンドポイント用）
+client = Client(
+    bearer_token=os.getenv("BEARER_TOKEN"),
+    consumer_key=os.getenv("API_KEY"),
+    consumer_secret=os.getenv("API_SECRET"),
+    access_token=os.getenv("ACCESS_TOKEN"),
+    access_token_secret=os.getenv("ACCESS_TOKEN_SECRET"),
+)
 
-auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth)
-
+# 投稿候補（お好きに変更可）
 tweets = [
-    "Render無料で自動投稿中！",
-    "Flask+schedule構成でBot稼働してます。",
-    "怠け者のための副業Bot🧠"
+    "Render無料で自動投稿中！ #副業",
+    "Flask+schedule構成でBot稼働してます。 #自動化",
+    "怠け者のための副業Bot🧠 #ズボラ副業"
 ]
 
+# 投稿処理
 def tweet():
     content = tweets[datetime.now().day % len(tweets)]
-    api.update_status(content)
+    client.create_tweet(text=content)
     print("✅ 投稿:", content)
 
-schedule.every().day.at("09:00").do(tweet)
+# 日本時間に合わせた3回投稿（UTC）
+schedule.every().day.at("23:05").do(tweet)  # 朝8:05
+schedule.every().day.at("03:10").do(tweet)  # 昼12:10
+schedule.every().day.at("12:05").do(tweet)  # 夜21:05
 
-def run_schedule():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-# ✅ ルートは app.run() の前に書くこと！
 @app.route('/')
 def index():
     return "Bot is running!"
@@ -45,7 +44,11 @@ def test_post():
     tweet()
     return "✅ テスト投稿しました"
 
-# ✅ 最後に Flaskアプリを起動
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
 if __name__ == '__main__':
     threading.Thread(target=run_schedule).start()
     port = int(os.environ.get("PORT", 10000))
