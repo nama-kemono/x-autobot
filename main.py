@@ -21,9 +21,10 @@ client = Client(
 # ✅ OpenAI APIキー設定
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# ChatGPTでツイート生成
+# ChatGPTでツイート生成（ログ付き）
 def generate_tweet():
     prompt = "怠け者向け副業やラクして稼ぐことをテーマに、Xに投稿する短いツイートを1つ作ってください。絵文字も使ってください。"
+    print("🧠 ChatGPTにリクエスト送信中...")
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o",  # または "gpt-3.5-turbo"
@@ -31,6 +32,7 @@ def generate_tweet():
             temperature=0.7,
         )
         content = response.choices[0].message["content"].strip()
+        print("📝 ChatGPT応答:", content)
         return content
     except Exception as e:
         print("❌ ChatGPT生成エラー:", e)
@@ -38,10 +40,11 @@ def generate_tweet():
 
 # 投稿処理
 def tweet():
+    print("📤 投稿処理開始")
     content = generate_tweet()
     try:
         client.create_tweet(text=content)
-        print("✅ 投稿:", content)
+        print("✅ 投稿成功:", content)
     except Exception as e:
         print("⚠️ 投稿エラー:", e)
 
