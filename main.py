@@ -48,4 +48,5 @@ def test_post():
 # ✅ 最後に Flaskアプリを起動
 if __name__ == '__main__':
     threading.Thread(target=run_schedule).start()
-    port = int(os.environ.get("PORT",
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
