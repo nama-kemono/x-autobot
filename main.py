@@ -1,100 +1,127 @@
+
 import os
-import schedule
-import time
 import random
-from datetime import datetime
 from flask import Flask
 import threading
-from openai import OpenAI
+import time
+from datetime import datetime, timedelta
+import openai
 from tweepy import Client
 
 app = Flask(__name__)
 
-# X (Twitter) API 認証（v2）
-client_x = Client(
+# 環境変数から認証情報を取得
+client = Client(
     bearer_token=os.getenv("BEARER_TOKEN"),
     consumer_key=os.getenv("API_KEY"),
     consumer_secret=os.getenv("API_SECRET"),
     access_token=os.getenv("ACCESS_TOKEN"),
     access_token_secret=os.getenv("ACCESS_TOKEN_SECRET"),
 )
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# OpenAI クライアント初期化
-client_ai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# 各スタイルのプロンプト
+prompts = {
+    "satori": """あなたはTwitter（X）で大人気の「さとり構文」ライターです。
+以下のような特徴を持つツイートを1つ140字以内で生成してください。
 
-# ログ出力関数
-def log(msg):
-    print(msg)
-    with open("log.txt", "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now()} - {msg}\n")
+【構成の特徴】
+1. 冒頭で「○○な人は全員△△を使った方が良い」と断言する。
+2. その人が△△を使うことで得られるメリット（効率化・魅力・理解）を具体的に述べる。
+3. 一方で反対の性質の人にとっても△△が効果的であると展開する。
+4. 結びに「10倍〜になる／見られる／モテる」など、インパクトあるフレーズで締める。
 
-# 重複ツイート回避のためのバリエーション付加
-def append_variation(text):
-    suffixes = ["✨", "💡", "✅", "#ズボラ副業", "#らくらく収益"]
-    return text + " " + random.choice(suffixes)
+【文体・トーン】
+- 一人称や主観を極力排除し、断言口調
+- AI、ツール、アプリ、サービス、考え方などを素材にする
+- 難しい単語は使わず、ライトでリズムよく
+- 箇条書きなし、絵文字なし
 
-# ChatGPTでツイートを生成
-def generate_tweet():
-    prompt = "怠け者向け副業やラクして稼ぐことをテーマに、Xに投稿する短いツイートを1つ作ってください。絵文字も使ってください。"
-    log("🧠 ChatGPTにリクエスト送信中...")
+対象のテーマは「怠け者と副業とChatGPTの相性」にしてください。
+""",
+
+    "lazy": """あなたは「ズボラ向け副業アカウント」の中の人です。
+パソコンやSNSの知識がない初心者にも伝わる言葉で、毎日自動で投稿が流れる仕組み（完全自動投稿）の魅力を伝えるツイートを、140字以内で1つ生成してください。
+
+【スタイル】
+- 会話調、親しみやすい語り口
+- 専門用語（Bot、スクリプト、APIなど）は使わない
+- 「設定だけで放置」「文章も勝手に考えてくれる」などのキーワードを活用
+- あくまでラク・ズボラ・初心者向けという視点を忘れずに
+
+【含めてほしい要素】
+- 投稿内容が自動生成されること
+- 投稿時間も自動で調整されること
+- 最初の1回の設定だけでOKなこと
+- それでも毎日投稿されるという驚きとラクさ
+""",
+
+    "buzz": """あなたはTwitter（X）でバズる投稿を作るプロです。
+以下の条件を全て満たす、140字以内の日本語ツイートを1つ作成してください。
+
+【目的】
+- 「怠け者 × 副業 × 自動化」をテーマにバズりやすい投稿を生成する。
+
+【構文ルール】
+- 冒頭でターゲットのペイン（悩みやイライラ）を具体的に提示
+- 解決方法はAI・GPT・自動投稿などで
+- ベネフィットは数値・体感・生活の変化として簡潔に示す（例：毎朝10分自由時間が増える！）
+- 説明口調を避け、テンポよくユーモアや断言口調を入れる（例：「断言する」「爆速」「など）
+- カジュアルさを保つ（マジで／一瞬で／ガチで／しんどい etc）
+- 冒頭にバズりワード（「こっそり言うけど」「怒られたら消すけど」など）を使ってもOK
+"""
+}
+
+# 投稿関数
+def generate_tweet(style):
+    prompt = prompts[style]
     try:
-        response = client_ai.chat.completions.create(
-            model="gpt-4o",  # または "gpt-3.5-turbo"
+        print(f"[{datetime.now()}] 🔁 {style} 生成中...")
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
+            temperature=0.9,
         )
-        content = response.choices[0].message.content.strip()
-        log("📝 ChatGPT応答: " + content)
-        return content
+        return response.choices[0].message["content"].strip()
     except Exception as e:
-        log("❌ ChatGPT生成エラー: " + str(e))
-        return "GPTエラー発生中💥 #副業"
+        print(f"[{datetime.now()}] ❌ 生成エラー:", e)
+        return "投稿生成エラー"
 
-# 投稿処理
-def tweet():
-    log("🔔 tweet() 呼び出されました")
-    content = generate_tweet()
-    content = append_variation(content)
+def post_tweet():
+    style = random.choices(["satori", "lazy", "buzz"], weights=[2, 2, 2])[0]
+    tweet = generate_tweet(style)
     try:
-        client_x.create_tweet(text=content)
-        log("✅ 投稿成功: " + content)
+        client.create_tweet(text=tweet)
+        print(f"[{datetime.now()}] ✅ 投稿完了: {tweet}")
     except Exception as e:
-        log("⚠️ 投稿エラー: " + str(e))
+        print(f"[{datetime.now()}] ⚠️ 投稿エラー: {e}")
 
-# 日本時間に合わせた投稿スケジュール（UTC）
-schedule.every().day.at("23:05").do(tweet)  # 朝8:05
-schedule.every().day.at("03:10").do(tweet)  # 昼12:10
-schedule.every().day.at("12:05").do(tweet)  # 夜21:05
+# 毎日10回投稿スケジュールを開始
+def start_posting_loop():
+    def loop():
+        times = sorted(random.sample(range(7, 22), 10))  # 7時〜21時の中からランダム10時間
+        print(f"📅 今日の投稿時間: {[f'{h}:00' for h in times]}")
+        for hour in times:
+            now = datetime.now()
+            next_post = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if next_post < now:
+                next_post += timedelta(days=1)
+            wait_seconds = (next_post - datetime.now()).total_seconds()
+            print(f"⏳ {hour}時の投稿まで {int(wait_seconds)}秒待機...")
+            time.sleep(wait_seconds)
+            post_tweet()
+    threading.Thread(target=loop).start()
 
-# Webルート：動作確認
 @app.route('/')
 def index():
-    return "Bot is running!"
+    return "📡 自動投稿Botが稼働中です"
 
-# テスト投稿用
 @app.route('/test')
-def test_post():
-    log("📲 /test エンドポイントにアクセスされました")
-    tweet()
+def test():
+    post_tweet()
     return "✅ テスト投稿しました"
 
-# ログ閲覧用
-@app.route('/logs')
-def show_logs():
-    try:
-        with open("log.txt", "r", encoding="utf-8") as f:
-            return "<pre>" + f.read() + "</pre>"
-    except Exception as e:
-        return f"❌ ログ読み込みエラー: {e}"
-
-# スケジュール実行用スレッド
-def run_schedule():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-# アプリ起動
-if __name__ == '__main__':
-    threading.Thread(target=run_schedule).start()
+if __name__ == "__main__":
+    start_posting_loop()
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
