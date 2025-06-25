@@ -1,3 +1,4 @@
-flask
-openai>=1.0.0
-tweepy
+Flask
+tweepy>=4.10.0
+openai
+python-dotenv
