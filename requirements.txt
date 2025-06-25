@@ -1,4 +1,4 @@
 flask
-openai
-tweepy
+tweepy>=4.16.0
+openai>=1.0.0
 python-dotenv
