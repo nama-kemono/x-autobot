@@ -1,4 +1,3 @@
 flask
-tweepy
-schedule
 openai>=1.0.0
+tweepy
