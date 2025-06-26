@@ -158,7 +158,14 @@ def test():
         traceback.print_exc()
         print(f"❌ ツイート失敗: {e}")
         return f"❌ ツイート失敗: {e}"
-
+        
+@app.route('/verify')
+def verify():
+    try:
+        user = client.get_me()
+        return f"✅ 認証成功: {user.data.username}"
+    except Exception as e:
+        return f"❌ 認証失敗: {e}"
 
 @app.route("/likefollow")
 def likefollow():
