@@ -141,10 +141,24 @@ def like_and_follow():
 def index():
     return "✅ Bot稼働中"
 
-@app.route("/test")
+@app.route('/test')
 def test():
-    post_tweet()
-    return "✅ テスト投稿完了"
+    style = random.choice(["satori", "lazy", "buzz"])
+    tweet = generate_tweet(style)
+
+    print(f"\n🔁 テスト投稿処理スタート（style: {style}）")
+    print(f"📄 生成された投稿: {tweet}")
+
+    try:
+        response = client.create_tweet(text=tweet)
+        print(f"✅ ツイート成功: {response}")
+        return "✅ テスト投稿成功"
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"❌ ツイート失敗: {e}")
+        return f"❌ ツイート失敗: {e}"
+
 
 @app.route("/likefollow")
 def likefollow():
