@@ -66,16 +66,15 @@ keywords = ["副業", "GPT", "お小遣い", "社畜"]
 def generate_tweet(style):
     try:
         print(f"[{datetime.now()}] 🔁 Generating tweet with style: {style}")
-        prompt = prompts.get(style)
-        print(f"[{datetime.now()}] 💬 Prompt content: {prompt[:100]}...")
         response = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
+            model="gpt-4o",  # または "gpt-3.5-turbo"
+            messages=[{"role": "user", "content": prompts[style]}],
             temperature=0.9,
         )
+        print(f"🧠 OpenAI Response: {response}")
         return response.choices[0].message["content"].strip()
     except Exception as e:
-        print(f"[{datetime.now()}] ❌ 投稿生成エラー: {e}")
+        print(f"[{datetime.now()}] ❌ Error generating tweet:", e)
         return "投稿生成エラー"
 
 def post_tweet():
