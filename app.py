@@ -1,4 +1,3 @@
-
 import os
 import random
 import time
@@ -67,14 +66,16 @@ keywords = ["副業", "GPT", "お小遣い", "社畜"]
 def generate_tweet(style):
     try:
         print(f"[{datetime.now()}] 🔁 Generating tweet with style: {style}")
+        prompt = prompts.get(style)
+        print(f"[{datetime.now()}] 💬 Prompt content: {prompt[:100]}...")
         response = openai.ChatCompletion.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompts[style]}],
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.9,
         )
         return response.choices[0].message["content"].strip()
     except Exception as e:
-        print(f"[{datetime.now()}] ❌ Error generating tweet:", e)
+        print(f"[{datetime.now()}] ❌ 投稿生成エラー: {e}")
         return "投稿生成エラー"
 
 def post_tweet():
@@ -99,10 +100,10 @@ def like_and_follow():
                     client.like(tweet.id)
                     client.follow_user(tweet.author_id)
                     print(f"✅ いいね・フォロー: {tweet.text[:30]}...")
-                    time.sleep(random.randint(60, 120))  # 各アクションの間隔
+                    time.sleep(random.randint(60, 120))
                 except Exception as inner:
                     print(f"⚠️ アクション失敗: {inner}")
-            time.sleep(60 * 15)  # キーワードごとに15分空ける
+            time.sleep(60 * 15)
     except TweepyException as e:
         print(f"❌ Tweepy エラー: {e}")
 
@@ -131,7 +132,7 @@ def start_like_follow_loop():
 
 @app.route("/")
 def index():
-    return "✅ X自動投稿＆いいね・フォローBot稼働中"
+    return "✅ X自動投稿＆いいね・フォローボット稼働中"
 
 @app.route("/test")
 def test():
