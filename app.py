@@ -80,11 +80,13 @@ def generate_tweet(style):
 def post_tweet():
     style = random.choices(["satori", "lazy", "buzz"], weights=[2, 2, 2])[0]
     tweet = generate_tweet(style)
+    print(f"[DEBUG] 生成ツイート内容: {tweet}")
     try:
         client.create_tweet(text=tweet)
         print(f"[{datetime.now()}] ✅ Tweet posted: {tweet}")
     except Exception as e:
         print(f"[{datetime.now()}] ❌ Failed to post tweet:", e)
+
 
 def like_and_follow():
     try:
