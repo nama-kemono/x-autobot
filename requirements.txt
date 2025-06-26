@@ -1,4 +1,3 @@
-
-tweepy==4.16.0
-flask
+Flask
+tweepy
 python-dotenv
