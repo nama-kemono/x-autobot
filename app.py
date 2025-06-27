@@ -63,21 +63,24 @@ prompts = {
 
 keywords = ["副業", "GPT", "お小遣い", "社畜"]
 
+import openai
+openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 def generate_tweet(style):
     print(f"[GEN_TWEET] style={style}", flush=True)
     try:
-        response = openai.ChatCompletion.create(
+        response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompts[style]}],
             temperature=0.9,
         )
-        print("[GEN_TWEET] openai応答:", response, flush=True)
-        content = response.choices[0].message["content"].strip()
-        print(f"[GEN_TWEET] content={content}", flush=True)
+        content = response.choices[0].message.content.strip()
+        print(f"[GEN_TWEET] AI生成: {content}", flush=True)
         return content
     except Exception as e:
-        print("[GEN_TWEET] AI生成エラー:", e, flush=True)
+        print(f"[GEN_TWEET] AI生成エラー: {e}", flush=True)
         return "投稿生成エラー"
+
 
 def post_tweet():
     print("[POST_TWEET] 呼び出しOK", flush=True)
