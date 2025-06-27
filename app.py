@@ -71,10 +71,13 @@ def generate_tweet(style):
             messages=[{"role": "user", "content": prompts[style]}],
             temperature=0.9,
         )
-        return response.choices[0].message["content"].strip()
+        tweet_text = response.choices[0].message["content"].strip()
+        print(f"[AI生成]: {tweet_text}（{len(tweet_text)}文字）")  # 文字数も表示
+        return tweet_text
     except Exception as e:
         print(f"[{datetime.now()}] ❌ Error generating tweet:", e)
         return "投稿生成エラー"
+
 
 def post_tweet():
     style = random.choices(["satori", "lazy", "buzz"], weights=[2, 2, 2])[0]
