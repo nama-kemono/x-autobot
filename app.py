@@ -141,13 +141,14 @@ def index():
 
 @app.route("/test")
 def test():
-    print("[ROUTE] /testエンドポイント呼ばれた！", flush=True)
+    print("[ROUTE] /testエンドポイント呼ばれた！ バージョンA", flush=True)
     try:
         post_tweet()
         print("[ROUTE] post_tweet()呼び出し完了", flush=True)
     except Exception as e:
         print("[ROUTE] post_tweet()例外:", e, flush=True)
     return "✅ テスト投稿完了"
+
 
 @app.route("/verify")
 def verify():
