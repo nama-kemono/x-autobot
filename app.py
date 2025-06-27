@@ -96,23 +96,27 @@ def post_tweet():
 
 def like_and_follow():
     try:
-        for keyword in keywords:
+        for keyword in random.sample(keywords, 1):  # 1日1キーワードだけ
             print(f"[LIKE_FOLLOW] 🔍 Searching: {keyword}", flush=True)
-            results = client.search_recent_tweets(query=keyword, max_results=10, tweet_fields=["author_id"])
+            results = client.search_recent_tweets(query=keyword, max_results=1, tweet_fields=["author_id"])
             print(f"[LIKE_FOLLOW] 🔁 検索件数: {len(results.data) if results.data else 0}", flush=True)
             if not results.data:
                 continue
-            for tweet in results.data:
-                try:
-                    client.like(tweet.id)
-                    client.follow_user(tweet.author_id)
-                    print(f"[LIKE_FOLLOW] ✅ いいね・フォロー: {tweet.text[:30]}...", flush=True)
-                    time.sleep(random.randint(60, 120))  # 各アクションの間隔
-                except Exception as inner:
-                    print(f"[LIKE_FOLLOW] ⚠️ アクション失敗: {inner}", flush=True)
-            time.sleep(60 * 15)  # キーワードごとに15分空ける
+            tweet = results.data[0]
+            try:
+                client.like(tweet.id)
+                client.follow_user(tweet.author_id)
+                print(f"[LIKE_FOLLOW] いいね・フォロー: {tweet.text[:30]}...", flush=True)
+            except Exception as inner:
+                print(f"[LIKE_FOLLOW] ⚠️ アクション失敗: {inner}", flush=True)
+                if "429" in str(inner):
+                    print("[LIKE_FOLLOW] 429エラー！12時間休憩", flush=True)
+                    time.sleep(60 * 60 * 12)
+                    return
+        time.sleep(60 * 60 * 6)  # 6時間ごとに1回だけ
     except TweepyException as e:
         print(f"[LIKE_FOLLOW] ❌ Tweepy エラー: {e}", flush=True)
+
 
 def start_posting_loop():
     def loop():
