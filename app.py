@@ -138,6 +138,7 @@ def post_loop():
 
 # --- いいね＆フォロー（制限対応） ---
 LIKE_FOLLOW_KEYWORDS = ["副業", "在宅ワーク", "ズボラ", "自動投稿", "ChatGPT", "お小遣い"]
+LIKE_FOLLOW_INTERVAL = 60 * 60 * 12  # 12時間（秒）
 
 def like_and_follow():
     count = 0
@@ -191,10 +192,9 @@ def test_post():
 def like_follow_loop():
     while True:
         like_and_follow()
-        time.sleep(LIKE_FOLLOW_INTERVAL)  # 例えば6時間
+        time.sleep(LIKE_FOLLOW_INTERVAL)
 
 if __name__ == "__main__":
     threading.Thread(target=post_loop, daemon=True).start()
     threading.Thread(target=like_follow_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
-
