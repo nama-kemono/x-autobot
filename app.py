@@ -117,8 +117,11 @@ def generate_tweet(style):
             tweet = tweet[:137] + "…"
         return tweet
     except Exception as e:
+        import traceback
         print(f"[GEN_TWEET] AI生成エラー: {e}")
+        traceback.print_exc()
         return "投稿生成エラー"
+
 
 def post_tweet(style):
     """ツイート生成＋投稿"""
