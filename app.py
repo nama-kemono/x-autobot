@@ -1,36 +1,33 @@
 import os
-import time
 import random
-import traceback
-from datetime import datetime, timedelta
-from threading import Thread
-
-from flask import Flask, jsonify
+import threading
+import time
+import datetime
+from flask import Flask
 import tweepy
-from openai import OpenAI
-from dotenv import load_dotenv
+import openai
 
-# ----------------------------
-# 環境変数ロード
-# ----------------------------
-load_dotenv()
+# --- 環境変数取得（key名は全て大文字） ---
+CONSUMER_KEY        = os.environ["CONSUMER_KEY"]
+CONSUMER_SECRET     = os.environ["CONSUMER_SECRET"]
+ACCESS_TOKEN        = os.environ["ACCESS_TOKEN"]
+ACCESS_TOKEN_SECRET = os.environ["ACCESS_TOKEN_SECRET"]
+BEARER_TOKEN        = os.environ["BEARER_TOKEN"]
+OPENAI_API_KEY      = os.environ["OPENAI_API_KEY"]
 
+# --- Tweepy Client（API v2） ---
 client = tweepy.Client(
-    consumer_key=os.environ["X_CONSUMER_KEY"],
-    consumer_secret=os.environ["X_CONSUMER_SECRET"],
-    access_token=os.environ["X_ACCESS_TOKEN"],
-    access_token_secret=os.environ["X_ACCESS_TOKEN_SECRET"],
+    bearer_token=BEARER_TOKEN,
+    consumer_key=CONSUMER_KEY,
+    consumer_secret=CONSUMER_SECRET,
+    access_token=ACCESS_TOKEN,
+    access_token_secret=ACCESS_TOKEN_SECRET
 )
 
-openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+# --- OpenAI API keyセット ---
+openai.api_key = OPENAI_API_KEY
 
-# 投稿スケジュール（分は必ず00でOK）
-POST_SCHEDULES = [
-    "8:00", "9:00", "10:00", "11:00", "12:00", "14:00", "16:00", "18:00", "19:00", "20:00"
-]
-POST_TIME_RANDOM_RANGE = 7  # 投稿時刻±7分
-
-# --- 最新プロンプト群 ---
+# --- 投稿用プロンプト設定 ---
 prompts = {
     "satori": """あなたはTwitter（X）で大人気の「さとり構文」ライターです。
 以下のような特徴を持つツイートを1つ140字以内で生成してください。
@@ -72,88 +69,93 @@ prompts = {
 - 冒頭にバズりワード（「こっそり言うけど」「怒られたら消すけど」など）を使ってもOK"""
 }
 
-# Flaskサーバ
-app = Flask(__name__)
+# --- 投稿スケジュール（例：毎時00分に投稿。ランダム幅で±7分ズラす） ---
+POST_TIMES = ['7:00', '8:00', '12:00', '13:00', '14:00', '15:00', '17:00', '19:00', '20:00', '21:00']
+RANDOMIZE_MINUTES = 7  # プラスマイナス最大7分
 
-# ----------------------------
-# 投稿生成ロジック
-# ----------------------------
-def generate_tweet(style="satori"):
-    prompt = prompts.get(style, prompts["lazy"])
+def get_next_post_time(now=None):
+    """次回投稿予定の時刻（ランダムずらし適用）を返す"""
+    if now is None:
+        now = datetime.datetime.now()
+    today = now.date()
+    possible_times = []
+    for t in POST_TIMES:
+        hour, minute = map(int, t.split(':'))
+        base_time = datetime.datetime.combine(today, datetime.time(hour, minute))
+        # ランダム幅（-7〜+7分）でずらし
+        delta = random.randint(-RANDOMIZE_MINUTES, RANDOMIZE_MINUTES)
+        post_time = base_time + datetime.timedelta(minutes=delta)
+        if post_time > now:
+            possible_times.append(post_time)
+    if not possible_times:
+        # 翌日1件目にする
+        t = POST_TIMES[0]
+        hour, minute = map(int, t.split(':'))
+        base_time = datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.time(hour, minute))
+        delta = random.randint(-RANDOMIZE_MINUTES, RANDOMIZE_MINUTES)
+        post_time = base_time + datetime.timedelta(minutes=delta)
+        return post_time
+    return min(possible_times)
+
+def generate_tweet(style):
+    """OpenAIでツイートを生成"""
+    prompt = prompts[style]
     try:
-        resp = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": "あなたはSNS自動化のプロです。"},
+                {"role": "system", "content": "あなたは日本語のTwitter(X)投稿作成AIです。140字以内で返答してください。"},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=80,
+            temperature=0.95,
+            n=1,
+            stop=None,
         )
-        content = resp.choices[0].message.content.strip()
-        return content
+        tweet = response.choices[0].message.content.strip().replace('\n', '')
+        if len(tweet) > 140:
+            tweet = tweet[:137] + "…"
+        return tweet
     except Exception as e:
-        print("[GEN_TWEET] AI生成エラー:", e)
-        traceback.print_exc()
+        print(f"[GEN_TWEET] AI生成エラー: {e}")
         return "投稿生成エラー"
 
-# ----------------------------
-# 投稿実行
-# ----------------------------
-def post_tweet(style=None):
-    if style is None:
-        style = random.choice(list(prompts.keys()))
-    print(f"[POST_TWEET] 選択style={style}")
-    text = generate_tweet(style=style)
-    print(f"[POST_TWEET] 生成文: {text}")
+def post_tweet(style):
+    """ツイート生成＋投稿"""
+    tweet = generate_tweet(style)
+    print(f"[POST_TWEET] 生成文: {tweet}")
     try:
-        response = client.create_tweet(text=text)
+        response = client.create_tweet(text=tweet)
         print(f"[POST_TWEET] 投稿レスポンス: {response}")
     except Exception as e:
-        print("[POST_TWEET] 投稿失敗:", e)
-        traceback.print_exc()
+        print(f"[POST_TWEET] 投稿失敗: {e}")
 
-# ----------------------------
-# 投稿ループ
-# ----------------------------
 def post_loop():
+    """スケジューリング投稿のループ"""
     while True:
-        try:
-            now = datetime.now()
-            future_times = []
-            for t in POST_SCHEDULES:
-                hour, minute = map(int, t.split(":"))
-                # ±7分ランダムずらし
-                random_offset = random.randint(-POST_TIME_RANDOM_RANGE, POST_TIME_RANDOM_RANGE)
-                candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                candidate += timedelta(minutes=random_offset)
-                if candidate <= now:
-                    candidate += timedelta(days=1)
-                future_times.append(candidate)
-            # 次の投稿時刻
-            next_time = min(future_times)
-            wait_sec = (next_time - now).total_seconds()
-            print(f"[POST_LOOP] ⏳ 次の投稿は {next_time.strftime('%H:%M')}（{int(wait_sec//60)}分後）")
-            time.sleep(wait_sec)
-            print(f"[POST_LOOP] 投稿開始: {datetime.now().strftime('%H:%M')}")
-            post_tweet()
-        except Exception as e:
-            print("[POST_LOOP] 致命的エラー:", e)
-            traceback.print_exc()
-            time.sleep(600)
+        now = datetime.datetime.now()
+        next_time = get_next_post_time(now)
+        sec = (next_time - now).total_seconds()
+        print(f"[POST_LOOP] ⏳ {next_time.strftime('%H:%M')}まで {int(sec)}秒待機...")
+        time.sleep(max(0, sec))
+        style = random.choice(list(prompts.keys()))
+        print(f"[POST_LOOP] 投稿style={style}")
+        post_tweet(style)
 
-# ----------------------------
-# サーバ起動 & 投稿スレッド起動
-# ----------------------------
+# --- Flaskルート ---
+app = Flask(__name__)
+
 @app.route("/")
 def index():
-    return jsonify({"status": "ok", "message": "x-autobot running!"})
+    return "X AutoBot 起動中"
 
 @app.route("/test")
-def test():
-    post_tweet()
-    return jsonify({"result": "ok"})
+def test_post():
+    style = random.choice(list(prompts.keys()))
+    post_tweet(style)
+    return f"Test投稿 style={style}"
 
 if __name__ == "__main__":
     print("[MAIN] サービス起動")
-    Thread(target=post_loop, daemon=True).start()
+    threading.Thread(target=post_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
