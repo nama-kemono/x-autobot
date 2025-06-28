@@ -1,25 +1,36 @@
 import os
-import random
 import time
-import threading
+import random
+import traceback
 from datetime import datetime, timedelta
-from flask import Flask
-import openai
-from tweepy import Client, TweepyException
+from threading import Thread
 
-app = Flask(__name__)
+from flask import Flask, jsonify
+import tweepy
+from openai import OpenAI
+from dotenv import load_dotenv
 
-# 環境変数の取得
-client = Client(
-    bearer_token=os.getenv("BEARER_TOKEN"),
-    consumer_key=os.getenv("API_KEY"),
-    consumer_secret=os.getenv("API_SECRET"),
-    access_token=os.getenv("ACCESS_TOKEN"),
-    access_token_secret=os.getenv("ACCESS_TOKEN_SECRET")
+# ----------------------------
+# 環境変数ロード
+# ----------------------------
+load_dotenv()
+
+client = tweepy.Client(
+    consumer_key=os.environ["X_CONSUMER_KEY"],
+    consumer_secret=os.environ["X_CONSUMER_SECRET"],
+    access_token=os.environ["X_ACCESS_TOKEN"],
+    access_token_secret=os.environ["X_ACCESS_TOKEN_SECRET"],
 )
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# プロンプト定義
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+# 投稿スケジュール（分は必ず00でOK）
+POST_SCHEDULES = [
+    "8:00", "9:00", "10:00", "11:00", "12:00", "14:00", "16:00", "18:00", "19:00", "20:00"
+]
+POST_TIME_RANDOM_RANGE = 7  # 投稿時刻±7分
+
+# --- 最新プロンプト群 ---
 prompts = {
     "satori": """あなたはTwitter（X）で大人気の「さとり構文」ライターです。
 以下のような特徴を持つツイートを1つ140字以内で生成してください。
@@ -61,114 +72,88 @@ prompts = {
 - 冒頭にバズりワード（「こっそり言うけど」「怒られたら消すけど」など）を使ってもOK"""
 }
 
-keywords = ["副業", "GPT", "お小遣い", "社畜"]
+# Flaskサーバ
+app = Flask(__name__)
 
-import openai
-openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-def generate_tweet(style):
-    print(f"[GEN_TWEET] style={style}", flush=True)
+# ----------------------------
+# 投稿生成ロジック
+# ----------------------------
+def generate_tweet(style="satori"):
+    prompt = prompts.get(style, prompts["lazy"])
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompts[style]}],
-            temperature=0.9,
+        resp = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "あなたはSNS自動化のプロです。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=80,
         )
-        content = response.choices[0].message.content.strip()
-        print(f"[GEN_TWEET] AI生成: {content}", flush=True)
+        content = resp.choices[0].message.content.strip()
         return content
     except Exception as e:
-        print(f"[GEN_TWEET] AI生成エラー: {e}", flush=True)
+        print("[GEN_TWEET] AI生成エラー:", e)
+        traceback.print_exc()
         return "投稿生成エラー"
 
-
-def post_tweet():
-    print("[POST_TWEET] 呼び出しOK", flush=True)
-    style = random.choices(["satori", "lazy", "buzz"], weights=[2, 2, 2])[0]
-    print(f"[POST_TWEET] 選択style={style}", flush=True)
-    tweet = generate_tweet(style)
-    print(f"[POST_TWEET] 生成文: {tweet}", flush=True)
+# ----------------------------
+# 投稿実行
+# ----------------------------
+def post_tweet(style=None):
+    if style is None:
+        style = random.choice(list(prompts.keys()))
+    print(f"[POST_TWEET] 選択style={style}")
+    text = generate_tweet(style=style)
+    print(f"[POST_TWEET] 生成文: {text}")
     try:
-        response = client.create_tweet(text=tweet)
-        print(f"[POST_TWEET] 投稿レスポンス: {response}", flush=True)
+        response = client.create_tweet(text=text)
+        print(f"[POST_TWEET] 投稿レスポンス: {response}")
     except Exception as e:
-        print(f"[POST_TWEET] 投稿失敗: {e}", flush=True)
+        print("[POST_TWEET] 投稿失敗:", e)
+        traceback.print_exc()
 
-def like_and_follow():
-    try:
-        for keyword in random.sample(keywords, 1):  # 1日1キーワードだけ
-            print(f"[LIKE_FOLLOW] 🔍 Searching: {keyword}", flush=True)
-            results = client.search_recent_tweets(query=keyword, max_results=1, tweet_fields=["author_id"])
-            print(f"[LIKE_FOLLOW] 🔁 検索件数: {len(results.data) if results.data else 0}", flush=True)
-            if not results.data:
-                continue
-            tweet = results.data[0]
-            try:
-                client.like(tweet.id)
-                client.follow_user(tweet.author_id)
-                print(f"[LIKE_FOLLOW] いいね・フォロー: {tweet.text[:30]}...", flush=True)
-            except Exception as inner:
-                print(f"[LIKE_FOLLOW] ⚠️ アクション失敗: {inner}", flush=True)
-                if "429" in str(inner):
-                    print("[LIKE_FOLLOW] 429エラー！12時間休憩", flush=True)
-                    time.sleep(60 * 60 * 12)
-                    return
-        time.sleep(60 * 60 * 6)  # 6時間ごとに1回だけ
-    except TweepyException as e:
-        print(f"[LIKE_FOLLOW] ❌ Tweepy エラー: {e}", flush=True)
-
-
-def start_posting_loop():
-    def loop():
-        times = sorted(random.sample(range(7, 22), 10))
-        print(f"[POST_LOOP] 📅 投稿スケジュール: {[f'{h}:00' for h in times]}", flush=True)
-        for hour in times:
+# ----------------------------
+# 投稿ループ
+# ----------------------------
+def post_loop():
+    while True:
+        try:
             now = datetime.now()
-            next_post = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-            if next_post < now:
-                next_post += timedelta(days=1)
-            wait = (next_post - datetime.now()).total_seconds()
-            print(f"[POST_LOOP] ⏳ {hour}時まで {int(wait)}秒待機...", flush=True)
-            time.sleep(wait)
+            future_times = []
+            for t in POST_SCHEDULES:
+                hour, minute = map(int, t.split(":"))
+                # ±7分ランダムずらし
+                random_offset = random.randint(-POST_TIME_RANDOM_RANGE, POST_TIME_RANDOM_RANGE)
+                candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                candidate += timedelta(minutes=random_offset)
+                if candidate <= now:
+                    candidate += timedelta(days=1)
+                future_times.append(candidate)
+            # 次の投稿時刻
+            next_time = min(future_times)
+            wait_sec = (next_time - now).total_seconds()
+            print(f"[POST_LOOP] ⏳ 次の投稿は {next_time.strftime('%H:%M')}（{int(wait_sec//60)}分後）")
+            time.sleep(wait_sec)
+            print(f"[POST_LOOP] 投稿開始: {datetime.now().strftime('%H:%M')}")
             post_tweet()
-    threading.Thread(target=loop, daemon=True).start()
+        except Exception as e:
+            print("[POST_LOOP] 致命的エラー:", e)
+            traceback.print_exc()
+            time.sleep(600)
 
-def start_like_follow_loop():
-    def loop():
-        while True:
-            like_and_follow()
-            print(f"[LIKE_FOLLOW_LOOP] 🕒 次のいいね／フォローまで60分待機", flush=True)
-            time.sleep(60 * 60)
-    threading.Thread(target=loop, daemon=True).start()
-
+# ----------------------------
+# サーバ起動 & 投稿スレッド起動
+# ----------------------------
 @app.route("/")
 def index():
-    print("[ROUTE] / index accessed", flush=True)
-    return "✅ X自動投稿＆いいね・フォローBot稼働中"
+    return jsonify({"status": "ok", "message": "x-autobot running!"})
 
 @app.route("/test")
 def test():
-    print("[ROUTE] /testエンドポイント呼ばれた！", flush=True)
-    try:
-        post_tweet()
-        print("[ROUTE] post_tweet()呼び出し完了", flush=True)
-    except Exception as e:
-        print("[ROUTE] post_tweet()例外:", e, flush=True)
-    return "✅ テスト投稿完了"
-
-@app.route("/verify")
-def verify():
-    try:
-        me = client.get_me()
-        print(f"[VERIFY] 認証成功: {me.data.username}", flush=True)
-        return f"✅ 認証成功: {me.data.username}"
-    except Exception as e:
-        print(f"[VERIFY] 認証失敗: {e}", flush=True)
-        return f"❌ 認証失敗: {e}"
+    post_tweet()
+    return jsonify({"result": "ok"})
 
 if __name__ == "__main__":
-    print("[MAIN] サービス起動", flush=True)
-    start_posting_loop()
-    start_like_follow_loop()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    print("[MAIN] サービス起動")
+    Thread(target=post_loop, daemon=True).start()
+    app.run(host="0.0.0.0", port=10000)
