@@ -160,8 +160,10 @@ def test_post():
         print("[POST_TWEET] 投稿レスポンス:", resp)
         return "OK"
     except Exception as e:
+        import traceback
         print("[POST_TWEET] 投稿失敗:", e)
-        return "NG", 500
+        traceback.print_exc()
+        return f"NG: {e}", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
