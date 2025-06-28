@@ -149,13 +149,16 @@ app = Flask(__name__)
 def index():
     return "X AutoBot 起動中"
 
-@app.route("/test")
+@app.route("/test", methods=["GET"])
 def test_post():
-    style = random.choice(list(prompts.keys()))
-    post_tweet(style)
-    return f"Test投稿 style={style}"
-
-if __name__ == "__main__":
-    print("[MAIN] サービス起動")
-    threading.Thread(target=post_loop, daemon=True).start()
-    app.run(host="0.0.0.0", port=10000)
+    print("[ROUTE] /testエンドポイント呼ばれた！")
+    try:
+        text = generate_tweet("lazy")  # 例: "lazy" スタイル
+        print("[POST_TWEET] 呼び出しOK")
+        print("[POST_TWEET] 生成文:", text)
+        resp = client.create_tweet(text=text)
+        print("[POST_TWEET] 投稿レスポンス:", resp)
+        return "OK"
+    except Exception as e:
+        print("[POST_TWEET] 投稿失敗:", e)
+        return "NG", 500
