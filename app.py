@@ -145,27 +145,25 @@ LIKE_FOLLOW_KEYWORDS = ["副業", "在宅ワーク", "ズボラ", "自動投稿"
 LIKE_FOLLOW_INTERVAL = 60 * 60 * 6  # 6時間ごと
 
 def like_and_follow():
-    try:
-        for keyword in random.sample(LIKE_FOLLOW_KEYWORDS, 1):
-            print(f"[LIKE_FOLLOW] 🔍 Searching: {keyword}", flush=True)
-            results = client.search_recent_tweets(query=keyword, max_results=10, tweet_fields=["author_id"])
-            print(f"[LIKE_FOLLOW] 🔁 検索件数: {len(results.data) if results.data else 0}", flush=True)
-            if not results.data:
-                continue
+    count = 0
+    for keyword in random.sample(keywords, 10):  # 10キーワードで最大10人狙う
+        if count >= 10:
+            break
+        results = client.search_recent_tweets(query=keyword, max_results=1, tweet_fields=["author_id"])
+        if results.data:
             tweet = results.data[0]
             try:
                 client.like(tweet.id)
                 client.follow_user(tweet.author_id)
-                print(f"[LIKE_FOLLOW] いいね・フォロー: {tweet.text[:30]}...", flush=True)
+                print(f"いいね・フォロー: {tweet.text[:30]}...", flush=True)
+                count += 1
+                time.sleep(3600)  # 1時間ごとにフォロー
             except Exception as inner:
-                print(f"[LIKE_FOLLOW] ⚠️ アクション失敗: {inner}", flush=True)
+                print(f"アクション失敗: {inner}", flush=True)
                 if "429" in str(inner):
-                    print("[LIKE_FOLLOW] 429エラー！12時間休憩", flush=True)
+                    print("429エラー！12時間休憩", flush=True)
                     time.sleep(60 * 60 * 12)
                     return
-        time.sleep(LIKE_FOLLOW_INTERVAL)
-    except Exception as e:
-        print(f"[LIKE_FOLLOW] ❌ Tweepy エラー: {e}", flush=True)
 
 def like_follow_loop():
     while True:
