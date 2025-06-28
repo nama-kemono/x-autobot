@@ -188,7 +188,13 @@ def test_post():
         return "NG", 500
 
 # --- メインスレッド起動 ---
+def like_follow_loop():
+    while True:
+        like_and_follow()
+        time.sleep(LIKE_FOLLOW_INTERVAL)  # 例えば6時間
+
 if __name__ == "__main__":
     threading.Thread(target=post_loop, daemon=True).start()
     threading.Thread(target=like_follow_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
+
