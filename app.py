@@ -16,7 +16,7 @@ BEARER_TOKEN        = os.environ["BEARER_TOKEN"]
 OPENAI_API_KEY      = os.environ["OPENAI_API_KEY"]
 
 # --- Tweepy Client（API v2） ---
-client = tweepy.Client(
+client_twitter = tweepy.Client(
     bearer_token=BEARER_TOKEN,
     consumer_key=CONSUMER_KEY,
     consumer_secret=CONSUMER_SECRET,
@@ -24,8 +24,8 @@ client = tweepy.Client(
     access_token_secret=ACCESS_TOKEN_SECRET
 )
 
-# --- OpenAI API keyセット ---
-openai.api_key = OPENAI_API_KEY
+# --- OpenAI Client（v1.x用。api_keyは引数で渡す！） ---
+client_openai = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # --- 投稿用プロンプト設定 ---
 prompts = {
@@ -98,10 +98,10 @@ def get_next_post_time(now=None):
     return min(possible_times)
 
 def generate_tweet(style):
-    """OpenAIでツイートを生成"""
+    """OpenAIでツイートを生成（新API構文・v1.x系）"""
     prompt = prompts[style]
     try:
-        response = openai.ChatCompletion.create(
+        response = client_openai.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "あなたは日本語のTwitter(X)投稿作成AIです。140字以内で返答してください。"},
@@ -122,13 +122,12 @@ def generate_tweet(style):
         traceback.print_exc()
         return "投稿生成エラー"
 
-
 def post_tweet(style):
     """ツイート生成＋投稿"""
     tweet = generate_tweet(style)
     print(f"[POST_TWEET] 生成文: {tweet}")
     try:
-        response = client.create_tweet(text=tweet)
+        response = client_twitter.create_tweet(text=tweet)
         print(f"[POST_TWEET] 投稿レスポンス: {response}")
     except Exception as e:
         print(f"[POST_TWEET] 投稿失敗: {e}")
@@ -152,27 +151,21 @@ app = Flask(__name__)
 def index():
     return "X AutoBot 起動中"
 
-import datetime
-import random
-
 @app.route("/test", methods=["GET"])
 def test_post():
     print("[ROUTE] /testエンドポイント呼ばれた！")
     try:
-        text = generate_tweet("lazy")
-        # ↓重複対策でランダムな数字と時刻を付加
-        text = f"{text} ({random.randint(0,9999)}/{datetime.datetime.now().strftime('%H:%M:%S')})"
+        text = generate_tweet("lazy")  # 例: "lazy" スタイル
         print("[POST_TWEET] 呼び出しOK")
         print("[POST_TWEET] 生成文:", text)
-        resp = client.create_tweet(text=text)
+        resp = client_twitter.create_tweet(text=text)
         print("[POST_TWEET] 投稿レスポンス:", resp)
         return "OK"
     except Exception as e:
-        import traceback
         print("[POST_TWEET] 投稿失敗:", e)
-        traceback.print_exc()
-        return f"NG: {e}", 500
-
+        return "NG", 500
 
 if __name__ == "__main__":
+    # 投稿ループを別スレッドで起動
+    threading.Thread(target=post_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
