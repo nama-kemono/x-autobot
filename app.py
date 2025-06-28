@@ -162,3 +162,6 @@ def test_post():
     except Exception as e:
         print("[POST_TWEET] 投稿失敗:", e)
         return "NG", 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
