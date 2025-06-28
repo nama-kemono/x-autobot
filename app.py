@@ -74,7 +74,6 @@ POST_TIMES = ['7:00', '8:00', '12:00', '13:00', '14:00', '15:00', '17:00', '19:0
 RANDOMIZE_MINUTES = 7  # ±7分ズラす
 
 def get_next_post_time(now=None):
-    """次回投稿予定の時刻（ランダムずらし適用）を返す"""
     if now is None:
         now = datetime.datetime.now()
     today = now.date()
@@ -96,7 +95,6 @@ def get_next_post_time(now=None):
     return min(possible_times)
 
 def generate_tweet(style):
-    """OpenAIでツイートを生成"""
     prompt = prompts[style]
     try:
         response = openai.chat.completions.create(
@@ -119,7 +117,6 @@ def generate_tweet(style):
         return "投稿生成エラー"
 
 def post_tweet(style):
-    """ツイート生成＋投稿"""
     tweet = generate_tweet(style)
     print(f"[POST_TWEET] 生成文: {tweet}", flush=True)
     try:
@@ -129,7 +126,6 @@ def post_tweet(style):
         print(f"[POST_TWEET] 投稿失敗: {e}", flush=True)
 
 def post_loop():
-    """スケジューリング投稿のループ"""
     while True:
         now = datetime.datetime.now()
         next_time = get_next_post_time(now)
@@ -141,33 +137,37 @@ def post_loop():
         post_tweet(style)
 
 # --- いいね＆フォロー（制限対応） ---
-LIKE_FOLLOW_KEYWORDS = ["副業", "在宅ワーク", "ズボラ", "自動投稿", "ChatGPT", "お小遣い"]
+LIKE_FOLLOW_KEYWORDS = [
+    "副業", "在宅ワーク", "ズボラ", "自動投稿", "ChatGPT", "お小遣い", "自動化", "稼ぐ", "お得", "副収入"
+]
 LIKE_FOLLOW_INTERVAL = 60 * 60 * 6  # 6時間ごと
 
 def like_and_follow():
     count = 0
-    for keyword in random.sample(keywords, 10):  # 10キーワードで最大10人狙う
+    for keyword in random.sample(LIKE_FOLLOW_KEYWORDS, min(10, len(LIKE_FOLLOW_KEYWORDS))):  # 10キーワードで最大10人狙う
         if count >= 10:
             break
         results = client.search_recent_tweets(query=keyword, max_results=1, tweet_fields=["author_id"])
+        print(f"[LIKE_FOLLOW] 🔁 検索件数: {len(results.data) if results.data else 0}", flush=True)
         if results.data:
             tweet = results.data[0]
             try:
                 client.like(tweet.id)
                 client.follow_user(tweet.author_id)
-                print(f"いいね・フォロー: {tweet.text[:30]}...", flush=True)
+                print(f"[LIKE_FOLLOW] いいね・フォロー: {tweet.text[:30]}...", flush=True)
                 count += 1
                 time.sleep(3600)  # 1時間ごとにフォロー
             except Exception as inner:
-                print(f"アクション失敗: {inner}", flush=True)
+                print(f"[LIKE_FOLLOW] アクション失敗: {inner}", flush=True)
                 if "429" in str(inner):
-                    print("429エラー！12時間休憩", flush=True)
+                    print("[LIKE_FOLLOW] 429エラー！12時間休憩", flush=True)
                     time.sleep(60 * 60 * 12)
                     return
 
 def like_follow_loop():
     while True:
         like_and_follow()
+        time.sleep(LIKE_FOLLOW_INTERVAL)  # 6時間休憩
 
 # --- Flaskルート ---
 app = Flask(__name__)
