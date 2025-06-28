@@ -149,11 +149,16 @@ app = Flask(__name__)
 def index():
     return "X AutoBot 起動中"
 
+import datetime
+import random
+
 @app.route("/test", methods=["GET"])
 def test_post():
     print("[ROUTE] /testエンドポイント呼ばれた！")
     try:
-        text = generate_tweet("lazy")  # 例: "lazy" スタイル
+        text = generate_tweet("lazy")
+        # ↓重複対策でランダムな数字と時刻を付加
+        text = f"{text} ({random.randint(0,9999)}/{datetime.datetime.now().strftime('%H:%M:%S')})"
         print("[POST_TWEET] 呼び出しOK")
         print("[POST_TWEET] 生成文:", text)
         resp = client.create_tweet(text=text)
@@ -164,6 +169,7 @@ def test_post():
         print("[POST_TWEET] 投稿失敗:", e)
         traceback.print_exc()
         return f"NG: {e}", 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
