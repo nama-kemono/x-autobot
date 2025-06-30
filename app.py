@@ -119,47 +119,20 @@ def generate_tweet(style):
 def post_tweet(style):
     tweet = generate_tweet(style)
     print(f"[POST_TWEET] 生成文: {tweet}", flush=True)
-    max_retry = 2  # 最大2回リトライ（合計3回試行）
+    max_retry = 2  # 最大2回リトライ
     for attempt in range(max_retry + 1):
         try:
             resp = client.create_tweet(text=tweet)
             print(f"[POST_TWEET] 投稿レスポンス: {resp}", flush=True)
-            return True  # 成功したら抜ける
+            return True
         except Exception as e:
             print(f"[POST_TWEET] 投稿失敗（{attempt+1}回目）: {e}", flush=True)
-            # 429系はリトライせず即中断
             if "429" in str(e):
                 print("[POST_TWEET] 429エラー検知→リトライせず終了", flush=True)
                 break
             if attempt < max_retry:
-                time.sleep(2)  # 2秒待機して再送
-    return False  # 失敗
-
-@app.route("/test", methods=["GET"])
-def test_post():
-    print("[ROUTE] /testエンドポイント呼ばれた！", flush=True)
-    try:
-        text = generate_tweet("lazy")
-        print("[POST_TWEET] 呼び出しOK", flush=True)
-        print("[POST_TWEET] 生成文:", text, flush=True)
-        max_retry = 2
-        for attempt in range(max_retry + 1):
-            try:
-                resp = client.create_tweet(text=text)
-                print("[POST_TWEET] 投稿レスポンス:", resp, flush=True)
-                return "OK"
-            except Exception as e:
-                print(f"[POST_TWEET] 投稿失敗（{attempt+1}回目）: {e}", flush=True)
-                if "429" in str(e):
-                    print("[POST_TWEET] 429エラー検知→リトライせず終了", flush=True)
-                    break
-                if attempt < max_retry:
-                    time.sleep(2)
-        return "NG", 500
-    except Exception as e:
-        print("[POST_TWEET] 投稿生成処理失敗:", e, flush=True)
-        return "NG", 500
-
+                time.sleep(2)
+    return False
 
 def post_loop():
     while True:
@@ -202,7 +175,6 @@ def like_and_follow():
         except Exception as e:
             print(f"[LIKE_FOLLOW] ❌ Tweepy エラー: {e}", flush=True)
 
-
 # --- Flaskルート ---
 app = Flask(__name__)
 
@@ -217,11 +189,22 @@ def test_post():
         text = generate_tweet("lazy")
         print("[POST_TWEET] 呼び出しOK", flush=True)
         print("[POST_TWEET] 生成文:", text, flush=True)
-        resp = client.create_tweet(text=text)
-        print("[POST_TWEET] 投稿レスポンス:", resp, flush=True)
-        return "OK"
+        max_retry = 2
+        for attempt in range(max_retry + 1):
+            try:
+                resp = client.create_tweet(text=text)
+                print("[POST_TWEET] 投稿レスポンス:", resp, flush=True)
+                return "OK"
+            except Exception as e:
+                print(f"[POST_TWEET] 投稿失敗（{attempt+1}回目）: {e}", flush=True)
+                if "429" in str(e):
+                    print("[POST_TWEET] 429エラー検知→リトライせず終了", flush=True)
+                    break
+                if attempt < max_retry:
+                    time.sleep(2)
+        return "NG", 500
     except Exception as e:
-        print("[POST_TWEET] 投稿失敗:", e, flush=True)
+        print("[POST_TWEET] 投稿生成処理失敗:", e, flush=True)
         return "NG", 500
 
 # --- メインスレッド起動 ---
