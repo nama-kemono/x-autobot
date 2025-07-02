@@ -91,10 +91,9 @@ def generate_tweet(style):
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "あなたは日本語のTwitter(X)投稿作成AIです。140字以内で返答してください。"},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=80,
+            max_tokens=140,
             temperature=0.95,
             n=1,
             stop=None,
